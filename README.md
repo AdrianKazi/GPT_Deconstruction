@@ -2,9 +2,9 @@
 
 This repository presents a full deconstruction of one GPT-style autoregressive language model. The notebook is written as a step-by-step build-up: first the smallest possible attention mechanism is opened and inspected, then the same logic is extended with residual connections, MLP, multiple transformer blocks, multi-head attention, GPT-scale dimensions, GPU/CPU placement, and finally a direct inspection of the original pretrained GPT-2.
 
-The separate code sections in the notebook are not independent final architectures. They are checkpoints used to break one GPT architecture into understandable parts. Each checkpoint adds a little more of the same final GPT structure, so the reader can see exactly what changes in tensors, shapes, probabilities, representations, and generated text.
+The code sections in the notebook are not independent final architectures. They are checkpoints used to break one GPT architecture into understandable parts. Each checkpoint adds a little more of the same final GPT structure, so the reader can see exactly what changes in tensors, shapes, probabilities, representations, and generated text.
 
-Full implementation: [gpt_model_dec.ipynb](./gpt_model_dec.ipynb)
+Full implementation: [GPT_Model_Deconstruction.ipynb](./GPT_Model_Deconstruction.ipynb)
 
 This README is the professional, code-free overview of the notebook. The notebook contains the full runnable implementation, all code, tensor checks, plots, outputs, and GPT-2 inspection.
 
@@ -21,7 +21,7 @@ Q = XW_Q,\quad K = XW_K,\quad V = XW_V
 $$
 
 $$
-A = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)
+A = \mathrm{softmax}\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)
 $$
 
 $$
@@ -44,7 +44,7 @@ In simple words: the token at a given position can use itself and previous token
 
 | Path | Purpose |
 | --- | --- |
-| [gpt_model_dec.ipynb](./gpt_model_dec.ipynb) | Full implementation: code, explanations, tensor shapes, plots, outputs, and GPT-2 inspection |
+| [GPT_Model_Deconstruction.ipynb](./GPT_Model_Deconstruction.ipynb) | Full implementation: code, explanations, tensor shapes, plots, outputs, and GPT-2 inspection |
 | [README.md](./README.md) | Code-free scientific overview of the whole notebook |
 | [figures/](./figures/) | Extracted notebook plots used in this README |
 
@@ -95,6 +95,10 @@ LayerNorm normalizes each token vector along the last dimension, which is `embed
 
 Conceptually, normalization changes each token representation toward mean `0` and standard deviation `1`. This stabilizes the stream before attention and MLP updates.
 
+![LayerNorm effect](figures/notebook_preview_md_22_1.png)
+
+The first plot appears exactly at the LayerNorm step. It shows the pre-normalization and post-normalization embedding distribution for a selected token, so it belongs here before Q/K/V projection.
+
 ### Q, K, V
 
 The notebook then takes the normalized stream and creates three projected matrices:
@@ -108,15 +112,31 @@ The notebook then takes the normalized stream and creates three projected matric
 
 The key point is that Q, K, and V keep the same batch and sequence dimensions while changing the representation space. In the first attention inspection, all three have shape `[10, 8, 64]`.
 
+![Q/K/V projection diagnostics](figures/notebook_preview_md_33_0.png)
+
+This plot belongs directly after the Q/K/V projection because it shows the projected matrices and the projection weights before any attention score is computed.
+
 ### Attention Scores and Scaling
 
 The notebook multiplies `Q` by transposed `K`. For one batch item, this means a `[8, 64]` matrix multiplied by a `[64, 8]` matrix, producing an `[8, 8]` token-to-token score matrix. Across all batches, the shape is `[10, 8, 8]`.
 
+![Raw attention score matrices](figures/notebook_preview_md_41_0.png)
+
+The raw `QK^T` plot is placed here because it is the first visual view of token-to-token interaction, before scaling and before the causal mask.
+
 These raw scores are then scaled by the square root of the embedding dimension. This matters because dot products grow with dimensionality. Without scaling, the softmax can become too sharp too early.
+
+![Scaled attention scores](figures/notebook_preview_md_45_0.png)
+
+The scaled-score plot compares the raw and scaled score ranges, so it belongs immediately after the scaling explanation.
 
 ### Causal Mask
 
 The mask simulates time. At the first token, the model can only see the first token. At later positions, it can see more previous tokens. Future tokens are not allowed, because text generation is causal.
+
+![Causal mask](figures/notebook_preview_md_49_0.png)
+
+This plot shows the lower-triangular past mask and the score matrix after future positions are blocked. It is the visual proof that the model is causal.
 
 The notebook also demonstrates why masked positions need `-inf`, not `0`. Softmax over a value of `0` still gives that entry probability. Softmax over `-inf` gives zero probability, which is exactly what causal language modeling needs.
 
@@ -124,23 +144,59 @@ The notebook also demonstrates why masked positions need `-inf`, not `0`. Softma
 
 After masking, softmax turns each row of attention scores into a probability distribution over previous tokens. This distribution says which previous tokens matter for building the current token representation.
 
+![Masked softmax attention](figures/notebook_preview_md_58_1.png)
+
+The masked-softmax plot is placed here because it comes after the causal mask and before multiplying by `V`.
+
+![Attention distribution close-up](figures/notebook_preview_md_61_0.png)
+
+The close-up plot shows one selected position and makes the same point in a more detailed way: only causally valid positions receive attention probability.
+
 Then attention weights multiply `V`. Before multiplication, the attention matrix has shape `[batch_size, num_tokens, num_tokens]`. After multiplying by `V`, the output returns to `[batch_size, num_tokens, embed_dim]`.
 
 In simple words: for each token position, attention attaches back a mixed value vector of length `embed_dim`.
 
+![Value mixing](figures/notebook_preview_md_67_0.png)
+
+This plot belongs at the exact moment where `attention_weights @ V` is explained. It shows how attention weights select and mix value vectors into a contextual representation.
+
 ### Output Projection and Vocabulary Projection
 
-After attention, the output projection rewrites the mixed value vector back into model space. The final vocabulary projection maps the token representation from `embed_dim` to `n_vocab`. In the GPT-2 tokenizer setup, `n_vocab = 50257`, so logits have shape `[batch_size, num_tokens, 50257]`.
+After attention, the output projection rewrites the mixed value vector back into model space.
 
-The notebook then uses the final sequence position for generation. This is important: next-token generation does not sample from every token position, but from the logits at the last position of the current context.
+![Output projection comparison](figures/notebook_preview_md_77_0.png)
+
+The output-projection plot is placed before vocabulary logits because it still operates inside the hidden representation space.
+
+The final vocabulary projection maps the token representation from `embed_dim` to `n_vocab`. In the GPT-2 tokenizer setup, `n_vocab = 50257`, so logits have shape `[batch_size, num_tokens, 50257]`.
+
+![Vocabulary projection](figures/notebook_preview_md_82_0.png)
+
+This plot shows the transition from hidden states into vocabulary logits, so it closes the forward-pass part before generation starts.
 
 ### Temperature and Sampling
 
+The notebook then uses the final sequence position for generation. This is important: next-token generation does not sample from every token position, but from the logits at the last position of the current context.
+
+![Last-token logits heatmap](figures/notebook_preview_md_100_0.png)
+
+The heatmap is placed at the first generation step because it shows logits taken from the last token position.
+
+![Last-token logits close-up](figures/notebook_preview_md_102_0.png)
+
+The close-up plot stays directly after the full heatmap because it zooms into the same next-token distribution.
+
 Generation applies softmax to the last-token logits divided by temperature. Higher temperature spreads probability mass across more tokens, so sampled text becomes more variable. Lower temperature concentrates probability mass around the strongest tokens, so generation becomes more predictable.
 
-The notebook uses multinomial sampling, meaning the selected token does not have to be the highest-probability token. It is sampled according to the probability distribution.
+![Temperature sampling distribution](figures/notebook_preview_md_113_0.png)
 
-After sampling, the next token is appended to the token sequence. The same process repeats for every new generated token.
+This plot belongs with the temperature explanation because it shows how higher temperature spreads probability mass across many tokens.
+
+![Temperature 1 sampling distribution](figures/notebook_preview_md_115_0.png)
+
+This plot follows immediately because it shows the same sampling mechanism with a more concentrated distribution.
+
+The notebook uses multinomial sampling, meaning the selected token does not have to be the highest-probability token. It is sampled according to the probability distribution. After sampling, the next token is appended to the token sequence. The same process repeats for every new generated token.
 
 ### Full Transformer Block
 
@@ -153,7 +209,11 @@ The notebook then wraps attention into the full transformer block. The block has
 
 Both branches use residual connections. This is the key transformer idea in the notebook: attention and MLP do not replace the stream. They produce updates that are added back to it.
 
-The flow is:
+![Residual attention update](figures/notebook_preview_md_157_0.png)
+
+This plot appears at the residual addition step: the attention output is not the new state by itself; it is an update added back into the stream.
+
+The transformer block flow is:
 
 | Step | Meaning |
 | --- | --- |
@@ -168,11 +228,33 @@ The flow is:
 
 The notebook emphasizes why the MLP expands the dimension. The expansion gives the representation more space, or different angles, to transform features. The geometric plot shows that some structures are hard to separate in lower dimension but easier after adding another dimension.
 
+![MLP geometric intuition](figures/notebook_preview_md_167_0.png)
+
+This plot is placed directly under the MLP expansion explanation because it visualizes the idea of giving the representation a larger feature space.
+
+![Nonlinear separation intuition](figures/notebook_preview_md_169_0.png)
+
+The separation plot follows the expansion plot because it explains why added dimensions can make patterns easier to separate.
+
+![GELU activation](figures/notebook_preview_md_172_0.png)
+
+The GELU plot is placed after the expansion/separation intuition because GELU is the nonlinearity applied inside the MLP before contraction back to `embed_dim`.
+
 ### Depth
 
 The transformer block is then repeated sequentially. Each block keeps the same tensor shape, but each block changes the hidden representation slightly. Because of residual connections, updates are incremental, and the accumulated effect across depth gradually refines the representation.
 
-This is the reason the notebook visualizes one block, all 12 blocks, and block-to-block differences.
+![Single-block representation change](figures/notebook_preview_md_217_0.png)
+
+The first depth plot shows the effect of one transformer block, so it comes before the full 12-block visualization.
+
+![Representations across 12 blocks](figures/notebook_preview_md_218_0.png)
+
+This plot belongs next because it shows how the residual stream changes across all 12 sequential blocks.
+
+![Block-to-block differences](figures/notebook_preview_md_220_0.png)
+
+The difference plot closes the depth section because it shows incremental updates between consecutive blocks.
 
 ### Multi-Head Attention
 
@@ -184,7 +266,19 @@ The important transformation is:
 | --- | --- |
 | `[batch_size, num_tokens, embed_dim]` | `[batch_size, num_heads, num_tokens, head_dim]` |
 
+![Q/K/V before head split](figures/notebook_preview_md_243_0.png)
+
+This plot is placed before the split because Q, K, and V still live in the full embedding dimension.
+
+![Q/K/V after head split](figures/notebook_preview_md_246_0.png)
+
+This plot follows immediately because it shows the same Q, K, and V tensors after splitting `embed_dim` into `num_heads` and `head_dim`.
+
 This means the model computes several smaller attentions instead of one huge attention block. Each head can focus on a different representation subspace. After attention, heads are transposed and merged back into `embed_dim`.
+
+![Multi-head merge](figures/notebook_preview_md_250_0.png)
+
+The merge plot closes the multi-head section because it shows independent heads being joined back into one `embed_dim` representation.
 
 The notebook's conclusion is direct: multi-head attention gives the model multiple independent attention views over the same sequence.
 
@@ -236,116 +330,8 @@ This closes the loop: the notebook first builds the mechanism from scratch, then
 | GPT-2 summary | Pretrained GPT-2 loads with expected transformer blocks and parameter structure |
 | GPT-2 generation | Pretrained GPT-2 produces coherent text, unlike the untrained intermediate checkpoints |
 
-## Visual Results
-
-All plots below are extracted from the notebook and kept in the repository under [figures/](./figures/).
-
-### Embeddings, Normalization, and Attention
-
-![LayerNorm effect](figures/notebook_preview_md_22_1.png)
-
-LayerNorm changes the distribution of each token representation along `embed_dim`, pushing it toward normalized scale.
-
-![Q/K/V projection diagnostics](figures/notebook_preview_md_33_0.png)
-
-Q, K, and V projections preserve batch and sequence axes while changing the representation used by attention.
-
-![Raw attention score matrices](figures/notebook_preview_md_41_0.png)
-
-Raw `QK^T` scores show token-to-token interactions before scaling and masking.
-
-![Scaled attention scores](figures/notebook_preview_md_45_0.png)
-
-Scaling compresses the score range before softmax, preventing overly sharp attention distributions.
-
-![Causal mask](figures/notebook_preview_md_49_0.png)
-
-The causal mask allows past and current tokens while blocking future tokens.
-
-![Masked softmax attention](figures/notebook_preview_md_58_1.png)
-
-After masking and softmax, attention becomes a causal probability distribution over visible tokens.
-
-![Attention distribution close-up](figures/notebook_preview_md_61_0.png)
-
-A selected position attends only to positions that are causally valid.
-
-![Value mixing](figures/notebook_preview_md_67_0.png)
-
-Attention weights multiply `V`, creating a mixed value vector for the selected token position.
-
-![Output projection comparison](figures/notebook_preview_md_77_0.png)
-
-The output projection rewrites the attention result back into the model representation space.
-
-![Vocabulary projection](figures/notebook_preview_md_82_0.png)
-
-The vocabulary projection maps hidden states to logits over GPT-2's vocabulary.
-
-### Generation and Sampling
-
-![Last-token logits heatmap](figures/notebook_preview_md_100_0.png)
-
-Generation uses the logits from the last token position, because that position contains the current context.
-
-![Last-token logits close-up](figures/notebook_preview_md_102_0.png)
-
-The final-position logits form the distribution from which the next token is sampled.
-
-![Temperature sampling distribution](figures/notebook_preview_md_113_0.png)
-
-Higher temperature makes more tokens probable and increases randomness in sampling.
-
-![Temperature 1 sampling distribution](figures/notebook_preview_md_115_0.png)
-
-Temperature near `1` keeps the distribution more concentrated around high-logit tokens.
-
-### Transformer Block and MLP
-
-![Residual attention update](figures/notebook_preview_md_157_0.png)
-
-The attention branch produces an update that is added back to the residual stream.
-
-![MLP geometric intuition](figures/notebook_preview_md_167_0.png)
-
-The MLP expansion creates a higher-dimensional feature space for transformation.
-
-![Nonlinear separation intuition](figures/notebook_preview_md_169_0.png)
-
-The geometric example shows why adding dimensions can make patterns easier to separate.
-
-![GELU activation](figures/notebook_preview_md_172_0.png)
-
-GELU introduces nonlinearity between MLP expansion and contraction.
-
-### Depth and Multi-Head Attention
-
-![Single-block representation change](figures/notebook_preview_md_217_0.png)
-
-One transformer block changes the representation while keeping the same shape.
-
-![Representations across 12 blocks](figures/notebook_preview_md_218_0.png)
-
-Across 12 blocks, the residual stream is gradually transformed.
-
-![Block-to-block differences](figures/notebook_preview_md_220_0.png)
-
-Consecutive block differences show that each block makes an incremental residual update.
-
-![Q/K/V before head split](figures/notebook_preview_md_243_0.png)
-
-Before multi-head splitting, Q, K, and V still live in the full embedding dimension.
-
-![Q/K/V after head split](figures/notebook_preview_md_246_0.png)
-
-After the split, each attention head receives its own `head_dim` subspace.
-
-![Multi-head merge](figures/notebook_preview_md_250_0.png)
-
-The independent heads are merged back into one `embed_dim` representation.
-
 ## Technical Note
 
 The notebook has been cleaned for GitHub rendering. Large widget state metadata and Colab-specific widget outputs were removed, while notebook cells, text outputs, image outputs, and all extracted figures were preserved.
 
-For the complete implementation, open [gpt_model_dec.ipynb](./gpt_model_dec.ipynb).
+For the complete implementation, open [GPT_Model_Deconstruction.ipynb](./GPT_Model_Deconstruction.ipynb).
