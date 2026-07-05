@@ -273,7 +273,7 @@ It works same for position embeddings, here we pass arange of length `num_tokens
 
 
 
-![png](notebook_preview_md_files/notebook_preview_md_22_1.png)
+![png](figures/notebook_preview_md_22_1.png)
 
 
 Normalization changes last dimension into $\mu = 0$ and $\sigma = 1$ what we can experience. So, last dimension which is `embed_dim` gets above parameters, in simpler words, each each token, in each batch, has vector of `embed_dim` length, this vector for each token gets normalized.
@@ -343,7 +343,7 @@ We get exactly same results.
 ```
 
 
-![png](notebook_preview_md_files/notebook_preview_md_33_0.png)
+![png](figures/notebook_preview_md_33_0.png)
 
 
 Since $W,Q,K$ are of shapes `[embed_dim,embed_dim]` and $x$ is of shape `[batch_size, num_tokens, embed_dim]` (taken from last step) we do the multiplication on last 2 dimensions matrices, so for x `[num_tokens, embed_dim]` and for $W,Q,K$ `[embed_dim, embed_dim]` after matrix multiplication we receive shape of `[num_tokens, embed_dim]` which is broadcasted through all batches, so eventually we receive `[batch_size, num_tokens, embed_dim]`.
