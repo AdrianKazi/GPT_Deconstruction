@@ -1,187 +1,198 @@
-# Model 0 - One Attention Head
+# GPT Model Deconstruction
 
-## Imports
+This repository is a scientific, code-free companion page for a complete notebook implementation of GPT-style language models. The project deconstructs the architecture from first principles: token embeddings, positional embeddings, layer normalization, causal self-attention, residual transformer blocks, multi-head attention, a larger GPT-like model, and finally the original pretrained GPT-2 architecture.
 
-```python
+Full implementation: [gpt_model_dec.ipynb](./gpt_model_dec.ipynb)
 
-```
+The notebook contains all executable code, intermediate tensor inspections, generated outputs, and model introspection. This README summarizes the notebook content and presents the extracted plots without reproducing implementation code.
 
+## Abstract
 
-```python
+The goal of this project is to make the internal mechanics of GPT-style autoregressive language models explicit and inspectable. Instead of treating GPT as a black box, the notebook builds progressively from a single attention head to a multi-block, multi-head transformer and then compares the constructed components with Hugging Face's pretrained GPT-2. Each section records tensor shapes, architectural decisions, visual diagnostics, and generation behavior.
 
-```
+The central object of study is causal scaled dot-product attention:
 
-		Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-		WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+$$
+Q = XW_Q,\quad K = XW_K,\quad V = XW_V
+$$
 
+$$
+A = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)
+$$
 
+$$
+H = AV
+$$
 
-```python
-# GPT Model Deconstruction — Quick Preview
+where the causal mask prevents each token position from attending to future positions:
 
-**Notebook:** `GPT_Model_Deconstruction.ipynb` contains full, line-by-line explanations and runnable code.  
-**README (this file):** curated quick preview — key concepts, formulas and representative visual results (no code). See the notebook for full derivations and implementation details.
+$$
+M_{ij} =
+\begin{cases}
+0, & j \le i \\
+-\infty, & j > i
+\end{cases}
+$$
 
----
+## Repository Contents
 
-## Overview
+| Path | Description |
+| --- | --- |
+| [gpt_model_dec.ipynb](./gpt_model_dec.ipynb) | Complete notebook implementation with code, explanations, plots, outputs, and GPT-2 inspection |
+| [README.md](./README.md) | Professional overview of the notebook without code |
+| [figures/](./figures/) | Extracted visual outputs used in this README |
 
-This project deconstructs a minimal GPT-style model (one attention head) to illustrate how embeddings, projections, normalization and attention interact. The notebook contains the full step-by-step narrative; this README surfaces the most important conceptual points and visual diagnostics for quick inspection.
+## Notebook Structure
 
-## Core equations
+| Section | Topic | Scientific purpose |
+| --- | --- | --- |
+| Model 0 | One attention head | Isolates embeddings, normalization, Q/K/V projection, causal masking, attention weights, value mixing, output projection, and sampling |
+| Model 1 | Full transformer block | Adds residual connections, pre-normalization, MLP expansion, GELU nonlinearity, and vocabulary projection |
+| Model 2 | Multiple transformer blocks | Studies representation changes across a 12-block residual stack |
+| Model 3 | Multi-head attention | Splits the embedding representation into independent attention subspaces and recombines them |
+| Model 4 | Full GPT-style model | Scales the implementation to GPT-like dimensions and compares CPU/GPU placement and generation cost |
+| Model 5 | Original GPT-2 inspection | Loads pretrained GPT-2 and inspects embeddings, transformer blocks, parameters, and sampled generation |
 
-The attention projections and causal softmax used in the experiments:
+## Main Results
 
-$$Q = XW_Q,\\quad K = XW_K,\\quad V = XW_V$$
+| Area | Result |
+| --- | --- |
+| Embedding pipeline | Token ids become dense token embeddings, positional vectors are added, and the residual stream keeps shape `[batch_size, sequence_length, embedding_dim]` |
+| Layer normalization | Normalization stabilizes each token representation across the embedding dimension before attention or MLP updates |
+| Q/K/V projections | Query, key, and value projections preserve batch and sequence axes while rewriting each token into attention-specific representations |
+| Causal masking | Replacing future-token scores with negative infinity produces zero probability after softmax |
+| Attention output | Attention weights mix value vectors into contextual token representations while preserving model dimensionality |
+| Transformer block | Attention and MLP branches update the residual stream without replacing it |
+| Transformer depth | Sequential blocks preserve tensor shape while gradually changing hidden representations |
+| Multi-head attention | `embed_dim = 256` is partitioned into `num_heads = 8` and `head_dim = 32`, enabling multiple attention subspaces |
+| GPT-like scaling | The larger model uses `embed_dim = 768`, context length `1024`, and GPT-2 vocabulary size `50257` |
+| GPT-2 comparison | The pretrained GPT-2 model contains 12 transformer blocks, token embeddings of shape `[50257, 768]`, and positional embeddings of shape `[1024, 768]` |
 
-$$A = \\operatorname{softmax}\\left(\\frac{QK^{\\top}}{\\sqrt{d_k}} + M\\right)$$
+## Captured Notebook Outputs
 
-$$H = AV$$
+| Notebook output | Captured observation |
+| --- | --- |
+| Tokenizer loading | Hugging Face GPT-2 tokenizer loads successfully; unauthenticated Hub warnings may appear |
+| Parameter inspection | The notebook prints embedding matrices, LayerNorm parameters, attention projections, output projections, and vocabulary projection weights |
+| Softmax masking test | Softmax over a finite masked value still assigns probability, while negative infinity removes future-token probability |
+| Model 0 generation | An untrained one-head model samples a continuation from the prompt `I believe I can fly, I believe` |
+| Model 1 generation | An untrained transformer block samples a continuation from `Love me tender, Love me sweet. Never let` |
+| Model 2 generation | A 12-block untrained transformer produces noisy, repetitive text, showing that architecture alone is not learned language |
+| Model 3 generation | The untrained multi-head model shows similar random sampling behavior |
+| Model 4 timing | The captured CPU run takes roughly three minutes for the configured long-context generation |
+| GPT-2 loading | Pretrained GPT-2 loads with the expected Hugging Face module structure |
+| GPT-2 generation | The pretrained model produces coherent English continuation from the prompt `Hello, how are you today?` |
 
-The causal mask $M$ enforces autoregressive attention:
-$$M_{ij}=\\begin{cases}0,& j\\le i\\\\-\\infty,& j>i\\end{cases}$$
+## Visual Results
 
-## Key findings & visuals
+The following figures are extracted from the notebook and grouped by the part of the architecture they explain.
 
-Below are selected conceptual notes and figures extracted from the notebook. Explanations that refer to the internal code cell-by-cell have been omitted.
-
-### Layer normalization
-
-Layer normalization standardizes the embedding vectors along the feature dimension, producing distributions with mean near 0 and unit variance — a stabilizing effect visible in the figure below.
+### Embeddings, Normalization, and Attention
 
 ![LayerNorm effect](figures/notebook_preview_md_22_1.png)
 
-### Q/K/V projections
+Layer normalization changes token-level embedding distributions toward zero mean and unit variance.
 
-Linear projections reproject token embeddings into the attention subspace; the plots show representative projection statistics and distributions.
+![Q/K/V projection diagnostics](figures/notebook_preview_md_33_0.png)
 
-![Projection diagnostics](figures/notebook_preview_md_33_0.png)
+The Q, K, and V projections preserve batch and sequence dimensions while changing the representation space used by attention.
 
-### Additional diagnostics
+![Raw attention score matrices](figures/notebook_preview_md_41_0.png)
 
-Representative visualizations used throughout the analysis:
+Raw dot-product attention scores show token-to-token compatibility before scaling and masking.
 
-![Fig 1](figures/notebook_preview_md_100_0.png) ![Fig 2](figures/notebook_preview_md_102_0.png) ![Fig 3](figures/notebook_preview_md_113_0.png)
+![Scaled attention scores](figures/notebook_preview_md_45_0.png)
 
-![Fig 4](figures/notebook_preview_md_115_0.png) ![Fig 5](figures/notebook_preview_md_157_0.png) ![Fig 6](figures/notebook_preview_md_167_0.png)
+Scaling by the square root of the key dimension prevents large dot products from making the softmax distribution too sharp.
 
-![Fig 7](figures/notebook_preview_md_169_0.png) ![Fig 8](figures/notebook_preview_md_172_0.png) ![Fig 9](figures/notebook_preview_md_217_0.png)
+![Causal mask](figures/notebook_preview_md_49_0.png)
 
-![Fig 10](figures/notebook_preview_md_218_0.png) ![Fig 11](figures/notebook_preview_md_220_0.png) ![Fig 12](figures/notebook_preview_md_243_0.png)
+The causal mask preserves access to current and previous positions while blocking future positions.
 
-![Fig 13](figures/notebook_preview_md_246_0.png) ![Fig 14](figures/notebook_preview_md_250_0.png) ![Fig 15](figures/notebook_preview_md_41_0.png)
+![Masked softmax attention](figures/notebook_preview_md_58_1.png)
 
-![Fig 16](figures/notebook_preview_md_45_0.png) ![Fig 17](figures/notebook_preview_md_49_0.png) ![Fig 18](figures/notebook_preview_md_58_1.png)
+After masking and softmax, each token receives a probability distribution over valid previous positions.
 
-![Fig 19](figures/notebook_preview_md_61_0.png) ![Fig 20](figures/notebook_preview_md_67_0.png) ![Fig 21](figures/notebook_preview_md_77_0.png)
+![Attention distribution close-up](figures/notebook_preview_md_61_0.png)
 
-![Fig 22](figures/notebook_preview_md_82_0.png)
+A selected token position can attend only to tokens that are causally visible.
 
----
+![Value mixing](figures/notebook_preview_md_67_0.png)
 
-## Usage
+Attention weights mix value vectors into a contextual representation for each token.
 
-- Open `GPT_Model_Deconstruction.ipynb` to run experiments and read full explanations.  
-- This README is a concise, publication-style preview designed for quick inspection by reviewers and collaborators.
+![Output projection comparison](figures/notebook_preview_md_77_0.png)
 
-If you'd like, I will add short captions to each figure, a brief abstract at the top, and a `LICENSE` file (e.g., MIT). Please confirm which items to add.
-		<>:15: SyntaxWarning: invalid escape sequence '\s'
-		<>:14: SyntaxWarning: invalid escape sequence '\m'
-		<>:14: SyntaxWarning: invalid escape sequence '\s'
-		<>:15: SyntaxWarning: invalid escape sequence '\m'
-		<>:15: SyntaxWarning: invalid escape sequence '\s'
-		/tmp/ipykernel_11065/1343297862.py:14: SyntaxWarning: invalid escape sequence '\m'
-			plt.plot(pre_dist,  'b-o', label = f'Pre- Norm embed_dim | $\mu = {pre_mean:>10.1f}$ | $\sigma = {pre_std:.1f}$')
-		/tmp/ipykernel_11065/1343297862.py:14: SyntaxWarning: invalid escape sequence '\s'
-			plt.plot(pre_dist,  'b-o', label = f'Pre- Norm embed_dim | $\mu = {pre_mean:>10.1f}$ | $\sigma = {pre_std:.1f}$')
-		/tmp/ipykernel_11065/1343297862.py:15: SyntaxWarning: invalid escape sequence '\m'
-			plt.plot(post_dist, 'r-o', label = f'Pre- Norm embed_dim | $\mu = {post_mean:>10.1f}$ | $\sigma = {post_std:.1f}$')
-		/tmp/ipykernel_11065/1343297862.py:15: SyntaxWarning: invalid escape sequence '\s'
-			plt.plot(post_dist, 'r-o', label = f'Pre- Norm embed_dim | $\mu = {post_mean:>10.1f}$ | $\sigma = {post_std:.1f}$')
+The output projection rewrites the attention result back into the model's residual stream.
 
+![Vocabulary projection](figures/notebook_preview_md_82_0.png)
 
+The final projection maps hidden states to vocabulary logits.
 
-![png](figures/notebook_preview_md_22_1.png)
+### Generation and Sampling
 
+![Last-token logits heatmap](figures/notebook_preview_md_100_0.png)
 
-Normalization changes last dimension into $\mu = 0$ and $\sigma = 1$ what we can experience. So, last dimension which is `embed_dim` gets above parameters, in simpler words, each each token, in each batch, has vector of `embed_dim` length, this vector for each token gets normalized.
+Autoregressive generation uses the final sequence position to predict the next token.
 
-One question is why we need to pass `embed_dim` in `__init__` in `nn.LayerNorm(embed_dim)`? `nn.LayerNorm()` either way always takes last dimenion and normalizes on last dimension, then why we need to give a shape of last dimension in `__init__`? Well, that's because we want to give all parameters in `__init__`, that's how after just class instantion we can check model parameters:
+![Last-token logits close-up](figures/notebook_preview_md_102_0.png)
 
+The selected final-position logits define the distribution used for next-token sampling.
 
-```python
+![Temperature sampling distribution](figures/notebook_preview_md_113_0.png)
 
-```
+Higher temperature spreads probability mass across more candidate tokens.
 
-		torch.Size([50257, 64])
-		torch.Size([8, 64])
-		torch.Size([64])
-		torch.Size([64])
-		torch.Size([64, 64])
-		torch.Size([64, 64])
-		torch.Size([64, 64])
-		torch.Size([64, 64])
-		torch.Size([64])
-		torch.Size([50257, 64])
-		torch.Size([50257])
+![Temperature 1 sampling distribution](figures/notebook_preview_md_115_0.png)
 
+Lower temperature concentrates probability mass around the highest-scoring tokens.
 
-Developers theoretically could make LayerNorm infer the last dimension during the first forward pass, but then parameters like LayerNorm.weight and LayerNorm.bias would not exist immediately after __init__.
+### Transformer Block and MLP
 
-That would make model.parameters(), state_dict(), and optimizer initialization less straightforward before the first forward pass.
+![Residual attention update](figures/notebook_preview_md_157_0.png)
 
-#### `k`,`q`,`v`
+The attention branch updates the residual stream while preserving tensor shape.
 
-First, $W_Q$, $W_K$, $W_V$ are the raw learnable weight matrices.
-Q, K, V are the projected matrices after multiplying X by those weights:
+![MLP geometric intuition](figures/notebook_preview_md_167_0.png)
 
-$$Q = XW_Q$$
-$$K = XW_K$$
-$$V = XW_V$$
+The MLP expands the representation into a higher-dimensional feature space before contraction.
 
-in code we named $W_Q$, $W_K$, $W_V$ by `query`, `key`, `value` variables.
+![Nonlinear separation intuition](figures/notebook_preview_md_169_0.png)
 
+The notebook uses a geometric example to illustrate how higher-dimensional features can make separation easier.
 
-```python
+![GELU activation](figures/notebook_preview_md_172_0.png)
 
-```
+GELU introduces nonlinearity between the MLP expansion and contraction layers.
 
+### Depth and Multi-Head Attention
 
+![Single-block representation change](figures/notebook_preview_md_217_0.png)
 
-		(torch.Size([10, 8, 64]), torch.Size([10, 8, 64]), torch.Size([10, 8, 64]))
+A single transformer block changes hidden representations while keeping the residual-stream shape fixed.
 
+![Representations across 12 blocks](figures/notebook_preview_md_218_0.png)
 
-`nn.Linear(x)` is just a dot product `x@[embed_dim,embed_dim].T`
+Stacked transformer blocks progressively transform the residual stream.
 
+![Block-to-block differences](figures/notebook_preview_md_220_0.png)
 
-```python
+Differences between consecutive blocks reveal incremental residual updates across depth.
 
-```
+![Q/K/V before head split](figures/notebook_preview_md_243_0.png)
 
+Before multi-head reshaping, Q, K, and V live in the full embedding dimension.
 
+![Q/K/V after head split](figures/notebook_preview_md_246_0.png)
 
-		(torch.Size([10, 8, 64]), torch.Size([10, 8, 64]), torch.Size([10, 8, 64]))
+After reshaping, each attention head receives a smaller feature subspace.
 
+![Multi-head merge](figures/notebook_preview_md_250_0.png)
 
-We get exactly same results.
+Independent attention heads are merged back into a single embedding representation.
 
+## Technical Notes
 
-```python
+The notebook has been normalized for GitHub rendering: large widget state metadata and Colab-specific widget outputs were removed while preserving notebook cells, text outputs, image outputs, and the extracted figures used by this README.
 
-```
-
-
-![png](figures/notebook_preview_md_33_0.png)
-
-
-Since $W,Q,K$ are of shapes `[embed_dim,embed_dim]` and $x$ is of shape `[batch_size, num_tokens, embed_dim]` (taken from last step) we do the multiplication on last 2 dimensions matrices, so for x `[num_tokens, embed_dim]` and for $W,Q,K$ `[embed_dim, embed_dim]` after matrix multiplication we receive shape of `[num_tokens, embed_dim]` which is broadcasted through all batches, so eventually we receive `[batch_size, num_tokens, embed_dim]`.
-
-#### `qk`
-
-
-```python
-
-```
-
-Notes:
-# GPT_Deconstruction
+For the complete executable implementation, open [gpt_model_dec.ipynb](./gpt_model_dec.ipynb).
