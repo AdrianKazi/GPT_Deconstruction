@@ -17,246 +17,74 @@
 
 
 ```python
+# GPT Model Deconstruction — Quick Preview
 
-```
+**Notebook:** `GPT_Model_Deconstruction.ipynb` contains full, line-by-line explanations and runnable code.  
+**README (this file):** curated quick preview — key concepts, formulas and representative visual results (no code). See the notebook for full derivations and implementation details.
 
+---
 
+## Overview
 
-		['SPECIAL_TOKENS_ATTRIBUTES',
-		 '__annotations__',
-		 '__bool__',
-		 '__call__',
-		 '__class__',
-		 '__delattr__',
-		 '__dict__',
-		 '__dir__',
-		 '__doc__',
-		 '__eq__',
-		 '__format__',
-		 '__ge__',
-		 '__getattr__',
-		 '__getattribute__',
-		 '__getstate__',
-		 '__gt__',
-		 '__hash__',
-		 '__init__',
-		 '__init_subclass__',
-		 '__le__',
-		 '__len__',
-		 '__lt__',
-		 '__module__',
-		 '__ne__',
-		 '__new__',
-		 '__reduce__',
-		 '__reduce_ex__',
-		 '__repr__',
-		 '__setattr__',
-		 '__sizeof__',
-		 '__str__',
-		 '__subclasshook__',
-		 '__weakref__',
-		 '_add_bos_token',
-		 '_add_eos_token',
-		 '_add_tokens',
-		 '_added_tokens_decoder',
-		 '_added_tokens_encoder',
-		 '_auto_class',
-		 '_convert_encoding',
-		 '_convert_id_to_token',
-		 '_convert_token_to_id_with_added_voc',
-		 '_decode',
-		 '_encode_plus',
-		 '_eventual_warn_about_too_long_sequence',
-		 '_extra_special_tokens',
-		 '_from_pretrained',
-		 '_get_files_timestamps',
-		 '_get_padding_truncation_strategies',
-		 '_in_target_context_manager',
-		 '_merges',
-		 '_pad',
-		 '_pad_token_type_id',
-		 '_patch_mistral_regex',
-		 '_post_init',
-		 '_processor_class',
-		 '_save_pretrained',
-		 '_set_model_specific_special_tokens',
-		 '_set_processor_class',
-		 '_should_update_post_processor',
-		 '_special_tokens_map',
-		 '_tokenizer',
-		 '_upload_modified_files',
-		 '_vocab',
-		 'add_bos_token',
-		 'add_eos_token',
-		 'add_prefix_space',
-		 'add_special_tokens',
-		 'add_tokens',
-		 'added_tokens_decoder',
-		 'added_tokens_encoder',
-		 'all_special_ids',
-		 'all_special_tokens',
-		 'apply_chat_template',
-		 'backend',
-		 'backend_tokenizer',
-		 'batch_decode',
-		 'can_save_slow_tokenizer',
-		 'chat_template',
-		 'clean_up_tokenization',
-		 'clean_up_tokenization_spaces',
-		 'clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output',
-		 'convert_added_tokens',
-		 'convert_ids_to_tokens',
-		 'convert_to_native_format',
-		 'convert_tokens_to_ids',
-		 'convert_tokens_to_string',
-		 'decode',
-		 'decoder',
-		 'deprecation_warnings',
-		 'encode',
-		 'encode_message_with_chat_template',
-		 'files_loaded',
-		 'from_pretrained',
-		 'get_added_vocab',
-		 'get_chat_template',
-		 'get_special_tokens_mask',
-		 'get_vocab',
-		 'init_inputs',
-		 'init_kwargs',
-		 'is_fast',
-		 'max_len_sentences_pair',
-		 'max_len_single_sentence',
-		 'model',
-		 'model_input_names',
-		 'model_max_length',
-		 'name_or_path',
-		 'num_special_tokens_to_add',
-		 'pad',
-		 'pad_token_type_id',
-		 'padding_side',
-		 'parse_response',
-		 'pretrained_vocab_files_map',
-		 'push_to_hub',
-		 'register_for_auto_class',
-		 'response_schema',
-		 'save_chat_templates',
-		 'save_pretrained',
-		 'save_vocabulary',
-		 'set_truncation_and_padding',
-		 'slow_tokenizer_class',
-		 'special_tokens_map',
-		 'split_special_tokens',
-		 'tokenize',
-		 'train_new_from_iterator',
-		 'truncation_side',
-		 'update_post_processor',
-		 'verbose',
-		 'vocab',
-		 'vocab_file',
-		 'vocab_files_names',
-		 'vocab_size']
+This project deconstructs a minimal GPT-style model (one attention head) to illustrate how embeddings, projections, normalization and attention interact. The notebook contains the full step-by-step narrative; this README surfaces the most important conceptual points and visual diagnostics for quick inspection.
 
+## Core equations
 
+The attention projections and causal softmax used in the experiments:
 
-## Hyperparameters
+$$Q = XW_Q,\\quad K = XW_K,\\quad V = XW_V$$
 
+$$A = \\operatorname{softmax}\\left(\\frac{QK^{\\top}}{\\sqrt{d_k}} + M\\right)$$
 
-```python
+$$H = AV$$
 
-```
+The causal mask $M$ enforces autoregressive attention:
+$$M_{ij}=\\begin{cases}0,& j\\le i\\\\-\\infty,& j>i\\end{cases}$$
 
-## Model
+## Key findings & visuals
 
-$$
-Q = XW_Q,\quad K = XW_K,\quad V = XW_V
-$$
+Below are selected conceptual notes and figures extracted from the notebook. Explanations that refer to the internal code cell-by-cell have been omitted.
 
-$$
-A =
-\operatorname{softmax}
-\left(
-\frac{QK^\\top}{\\sqrt{d_k}} + M
-\right)
-$$
+### Layer normalization
 
-$$
-H = AV
-$$
+Layer normalization standardizes the embedding vectors along the feature dimension, producing distributions with mean near 0 and unit variance — a stabilizing effect visible in the figure below.
 
-$$
-\\operatorname{CausalAttention}(Q,K,V)
-=
-H W_O
-=
-\\operatorname{softmax}
-\left(
-\frac{QK^\\top}{\\sqrt{d_k}} + M
-\right)
-V W_O
-$$
+![LayerNorm effect](figures/notebook_preview_md_22_1.png)
 
-$$
-M_{ij}
-=
-\begin{cases}
-0, & j \le i \\
--\\infty, & j > i
-\end{cases}
-$$
+### Q/K/V projections
 
+Linear projections reproject token embeddings into the attention subspace; the plots show representative projection statistics and distributions.
 
-```python
+![Projection diagnostics](figures/notebook_preview_md_33_0.png)
 
-```
+### Additional diagnostics
 
-## Deconstruction
+Representative visualizations used throughout the analysis:
 
-### forward()
+![Fig 1](figures/notebook_preview_md_100_0.png) ![Fig 2](figures/notebook_preview_md_102_0.png) ![Fig 3](figures/notebook_preview_md_113_0.png)
 
-#### `tok_embed`, `pos_embed`
+![Fig 4](figures/notebook_preview_md_115_0.png) ![Fig 5](figures/notebook_preview_md_157_0.png) ![Fig 6](figures/notebook_preview_md_167_0.png)
 
+![Fig 7](figures/notebook_preview_md_169_0.png) ![Fig 8](figures/notebook_preview_md_172_0.png) ![Fig 9](figures/notebook_preview_md_217_0.png)
 
-```python
+![Fig 10](figures/notebook_preview_md_218_0.png) ![Fig 11](figures/notebook_preview_md_220_0.png) ![Fig 12](figures/notebook_preview_md_243_0.png)
 
-```
+![Fig 13](figures/notebook_preview_md_246_0.png) ![Fig 14](figures/notebook_preview_md_250_0.png) ![Fig 15](figures/notebook_preview_md_41_0.png)
 
+![Fig 16](figures/notebook_preview_md_45_0.png) ![Fig 17](figures/notebook_preview_md_49_0.png) ![Fig 18](figures/notebook_preview_md_58_1.png)
 
+![Fig 19](figures/notebook_preview_md_61_0.png) ![Fig 20](figures/notebook_preview_md_67_0.png) ![Fig 21](figures/notebook_preview_md_77_0.png)
 
-		torch.Size([10, 8, 64])
+![Fig 22](figures/notebook_preview_md_82_0.png)
 
+---
 
+## Usage
 
-`nn.Embedding` accepts 2 values: `(num_embeddings, embedding_dim)`. In our example, `num_embeddings` is `n_vocab`, i.e. the input to `nn.Embedding` contains integer indices, and each number must be lower than `num_embeddings` (in our example, lower than `n_vocab`). `embedding_dim` is the length of the vector assigned to each index. For example, `tok_x` has shape `[batch_size, num_tokens]`, meaning each element inside `tok_x` is a token ID from `0` to `n_vocab - 1`. The outcome is that for every batch and every token, we get an embedding vector of length `embedding_dim`; therefore, `token_embeddings` has shape `[batch_size, num_tokens, embed_dim]`.
+- Open `GPT_Model_Deconstruction.ipynb` to run experiments and read full explanations.  
+- This README is a concise, publication-style preview designed for quick inspection by reviewers and collaborators.
 
-
-```python
-
-```
-
-
-		torch.Size([8, 64])
-
-
-It works same for position embeddings, here we pass arange of length `num_tokens` taken from `tok_x`. That causes, than each index of arange get the embedding vector.
-
-#### `layer_norm_1`
-
-
-```python
-
-```
-
-```python
-
-```
-
-
-```python
-
-```
-
-		<>:14: SyntaxWarning: invalid escape sequence '\m'
-		<>:14: SyntaxWarning: invalid escape sequence '\s'
-		<>:15: SyntaxWarning: invalid escape sequence '\m'
+If you'd like, I will add short captions to each figure, a brief abstract at the top, and a `LICENSE` file (e.g., MIT). Please confirm which items to add.
 		<>:15: SyntaxWarning: invalid escape sequence '\s'
 		<>:14: SyntaxWarning: invalid escape sequence '\m'
 		<>:14: SyntaxWarning: invalid escape sequence '\s'
