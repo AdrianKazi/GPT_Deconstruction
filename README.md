@@ -352,3 +352,7 @@ This is the final check: first we build the mechanism step by step, then we insp
 The notebook has been cleaned for GitHub rendering. Large widget state metadata and Colab-specific widget outputs were removed, while notebook cells, text outputs, image outputs, and all extracted figures were preserved.
 
 For the full implementation, open [GPT_Model_Deconstruction.ipynb](./GPT_Model_Deconstruction.ipynb).
+
+## Reference
+
+Models are based on Mike X Cohen course and editted, deconstruction and plots are made by myself.
